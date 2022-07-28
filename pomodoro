@@ -1,0 +1,125 @@
+#!/usr/bin/env sh
+
+# This is free and unencumbered software released into the public domain.
+#
+# Anyone is free to copy, modify, publish, use, compile, sell, or
+# distribute this software, either in source code form or as a compiled
+# binary, for any purpose, commercial or non-commercial, and by any
+# means.
+
+usage() {
+    cat << HELP
+usage: pomodoro [--no-notify-send] [--work NUMBER[SUFFIX]] [--break NUMBER[SUFFIX]]
+
+A suckless Pomodoro timer.
+
+    -N, --no-notify-send
+                do not send desktop notifications
+    -w NUMBER[SUFFIX], --work NUMBER[SUFFIX]
+                the work time duration (default is 25m)
+    -b NUMBER[SUFFIX], --break NUMBER[SUFFIX]
+                the break time duration (default is 5m)
+    -h, --help  display this help and exit
+
+SUFFIX may be 'm' for minutes (the default) or 'h' for hours.
+HELP
+}
+
+sleep_progress() {
+    local t=$1
+    
+    case $t in
+        *m)
+            t=${t%m}
+        ;;
+        *h)
+            t=${t%h}
+            # Exit with error code 2 if $t is not an integer
+            t=$((t * 60))
+        ;;
+    esac
+
+    # Check if $t is an integer
+    [ $t -eq $t ] || exit 5
+    echo "Remaining time: ${t}m"
+    
+    while [ $t -gt 0 ]; do
+        sleep 1m
+        t=$((t-1))
+        echo "\e[1A\e[KRemaining time: ${t}m"
+    done
+    
+    echo -n "\e[1A\e[K"
+}
+
+NOTIFY=""
+WORK=25
+BREAK=5
+
+while [ $# -gt 0 ]; do
+    case $1 in
+        -h|--help)
+            shift
+            usage
+            exit
+        ;;
+        -N|--no-notify-send)
+            shift
+            NOTIFY=true
+        ;;
+        -w|--work)
+            shift
+
+            if [ $# = 0 ]; then
+                echo "Missing argument for --work parameter."
+                usage
+                exit 3
+            fi
+
+            WORK=$1
+            shift
+        ;;
+        -b|--break)
+            shift
+
+            if [ $# = 0 ]; then
+                echo "Missing argument for --break parameter."
+                usage
+                exit 4
+            fi
+
+            BREAK=$1
+            shift
+        ;;
+        *)
+            echo "Unkown option: $1."
+            usage
+            exit 1
+        ;;
+    esac
+done
+
+clear
+
+if [ -z "$NOTIFY" ]; then
+    NOTIFY="$(which notify-send)"
+fi
+
+if [ -z "$NOTIFY" ]; then
+    echo "notify-send not found."
+    NOTIFY=true
+fi
+
+while :; do
+    echo "Work time started. Good work."
+    sleep_progress $WORK
+    echo "Work time finished. Take a break."
+    "$NOTIFY" -a "Pomodoro Timer" -i timer-alt-symbolic "Time finished" "Work time finished. Take a break."
+    read -p "Press Enter to continue or Ctrl+C to abort..." e
+    echo "Break time started. Stretch your legs."
+    sleep_progress $BREAK
+    echo "Break time finished. Back to work."
+    "$NOTIFY" -a "Pomodoro Timer" -i timer-alt-symbolic "Time finished" "Break time finished. Back to work."
+    read -p "Press Enter to continue..." e
+    clear
+done
